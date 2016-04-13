@@ -1,4 +1,4 @@
-﻿using Discord;
+using Discord;
 using Discord.Commands;
 using NadekoBot.Extensions;
 using System;
@@ -332,7 +332,7 @@ namespace NadekoBot.Classes.CardsAgainstHumanity
 
 
         /// <summary>
-        /// 
+        /// This is what happens when NadekoBot receives messages
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -413,7 +413,7 @@ namespace NadekoBot.Classes.CardsAgainstHumanity
                     if (!int.TryParse(msg.Trim(), out index))
                         return;
                     index--; //!!!
-                
+                    if (index > stat.Hand.Count() -1) return;
                     cardSet.Add(stat.Hand[index]);
                 }
                 else {
@@ -432,6 +432,7 @@ namespace NadekoBot.Classes.CardsAgainstHumanity
                         int index;
                         if (!int.TryParse(s, out index)) return;
                         index--; //!!!
+                        if (index < 0 || index > stat.Hand.Count() -1)
                         cardSet.Add(stat.Hand[index]);
                     }
                 }
@@ -549,7 +550,7 @@ namespace NadekoBot.Classes.CardsAgainstHumanity
                 stats.Hand.Add(CAHWhiteCardPool.Instance.GetRandomWhiteCard(oldWhiteCards));
             }
             var sb = new StringBuilder();
-            sb.Append("You have the following cards:\n");
+            sb.Append($"For the current Black card{currentBlackCard.ToString()}\nYou have the following cards:\n");
             int i = 1; //!!!
             foreach (var c in stats.Hand)
             {
