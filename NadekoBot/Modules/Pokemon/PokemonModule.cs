@@ -9,6 +9,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace NadekoBot.Modules.Pokemon
 {
@@ -78,6 +79,126 @@ namespace NadekoBot.Modules.Pokemon
                 cgb.AddCheck(PermissionChecker.Instance);
 
                 commands.ForEach(cmd => cmd.Init(cgb));
+
+                cgb.CreateCommand(Prefix + "atk")
+                .Description("Attack a target with the given move. Must include @target, order doesn't matter.\n**Usage**: {Prefix}atk fire dance @target")
+                .Parameter("args", ParameterType.Unparsed)
+                .Do(async e =>
+                {
+                    var args = e.GetArg("args");
+                    string regexString = @"\<\@(\d+)\>";
+                    var match = Regex.Match(args, regexString);
+                    if (!match.Success)
+                    {
+                        await e.Channel.SendMessage("Can't find target");
+                        return;
+                    }
+                    var targetId = ulong.Parse(match.Groups[1].Value);
+                    var target = e.Server.GetUser(targetId);
+                    var moveString = args.Replace(match.Value, String.Empty).Trim();
+                    if (target == null)
+                    {
+                        await e.Channel.SendMessage("No such person.");
+                        return;
+                    }
+                    else if (target == e.User)
+                    {
+                        await e.Channel.SendMessage("You can't attack yourself.");
+                        return;
+                    }
+                    // Checking stats first, then move
+                    //Set up the userstats
+                    PokeStats userStats;
+                    userStats = Stats.GetOrAdd(e.User.Id, new PokeStats());
+
+                    //Check if able to move
+                    //User not able if HP < 0, has made more than 4 attacks
+                    if (userStats.Hp < 0)
+                    {
+                        await e.Channel.SendMessage($"{e.User.Mention} has fainted and was not able to move!");
+                        return;
+                    }
+                    if (userStats.MovesMade >= 5)
+                    {
+                        await e.Channel.SendMessage($"{e.User.Mention} has used too many moves in a row and was not able to move!");
+                        return;
+                    }
+                    if (userStats.LastAttacked.Contains(target.Id))
+                    {
+                        await e.Channel.SendMessage($"{e.User.Mention} can't attack again without retaliation!");
+                        return;
+                    }
+                    //get target stats
+                    PokeStats targetStats;
+                    targetStats = Stats.GetOrAdd(target.Id, new PokeStats());
+
+                    //If target's HP is below 0, no use attacking
+                    if (targetStats.Hp <= 0)
+                    {
+                        await e.Channel.SendMessage($"{target.Mention} has already fainted!");
+                        return;
+                    }
+
+                    //Check whether move can be used
+                    PokemonType userType = GetPokeType(e.User.Id);
+
+                    var enabledMoves = userType.Moves;
+                    if (!enabledMoves.Contains(moveString.ToLowerInvariant()))
+                    {
+                        await e.Channel.SendMessage($"{e.User.Mention} was not able to use **{moveString}**, use `{Prefix}ml` to see moves you can use");
+                        return;
+                    }
+
+                    //get target type
+                    PokemonType targetType = GetPokeType(target.Id);
+                    //generate damage
+                    int damage = GetDamage(userType, targetType);
+                    //apply damage to target
+                    targetStats.Hp -= damage;
+
+                    var response = $"{e.User.Mention} used **{moveString}**{userType.Icon} on {target.Mention}{targetType.Icon} for **{damage}** damage";
+
+                    //Damage type
+                    if (damage < 40)
+                    {
+                        response += "\nIt's not effective..";
+                    }
+                    else if (damage > 60)
+                    {
+                        response += "\nIt's super effective!";
+                    }
+                    else
+                    {
+                        response += "\nIt's somewhat effective";
+                    }
+
+                    //check fainted
+
+                    if (targetStats.Hp <= 0)
+                    {
+                        response += $"\n**{target.Name}** has fainted!";
+                    }
+                    else
+                    {
+                        response += $"\n**{target.Name}** has {targetStats.Hp} HP remaining";
+                    }
+
+                    //update other stats
+                    userStats.LastAttacked.Add(target.Id);
+                    userStats.MovesMade++;
+                    targetStats.MovesMade = 0;
+                    if (targetStats.LastAttacked.Contains(e.User.Id))
+                    {
+                        targetStats.LastAttacked.Remove(e.User.Id);
+                    }
+
+                    //update dictionary
+                    //This can stay the same right?
+                    Stats[e.User.Id] = userStats;
+                    Stats[target.Id] = targetStats;
+
+                    await e.Channel.SendMessage(response);
+                });
 
                 cgb.CreateCommand(Prefix + "attack")
                     .Description("Attacks a target with the given move")
