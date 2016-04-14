@@ -4,8 +4,10 @@ using NadekoBot.Extensions;
 using NadekoBot.Modules;
 using NadekoBot.Modules.Administration.Commands;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Timers;
@@ -27,6 +29,7 @@ namespace NadekoBot
         public int VoiceChannelsCount { get; private set; } = 0;
 
         private readonly Timer commandLogTimer = new Timer() { Interval = 10000 };
+        //private readonly Timer carbonStatusTimer = new Timer() { Interval = 3600000 };
 
         static NadekoStats() { }
 
@@ -54,6 +57,7 @@ namespace NadekoBot
                     ServerCount++;
                     TextChannelsCount += e.Server.TextChannels.Count();
                     VoiceChannelsCount += e.Server.VoiceChannels.Count();
+                    SendUpdateToCarbon();
                 }
                 catch { }
             };
@@ -64,6 +68,7 @@ namespace NadekoBot
                     ServerCount--;
                     TextChannelsCount -= e.Server.TextChannels.Count();
                     VoiceChannelsCount -= e.Server.VoiceChannels.Count();
+                    SendUpdateToCarbon();
                 }
                 catch { }
             };
@@ -93,6 +98,33 @@ namespace NadekoBot
                 }
                 catch { }
             };
+        }
+
+        private async Task SendUpdateToCarbon()
+        {
+            if (string.IsNullOrWhiteSpace(NadekoBot.Creds.CarbonKey))
+                return;
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    using (var content = new FormUrlEncodedContent(new Dictionary<string, string> {
+                                { "servercount", NadekoBot.Client.Servers.Count().ToString() },
+                                { "key", NadekoBot.Creds.CarbonKey }
+                    }))
+                    {
+                        content.Headers.Clear();
+                        content.Headers.Add("Content-Type", "application/x-www-form-urlencoded");
+
+                        var res = await client.PostAsync("https://www.carbonitex.net/discord/data/botdata.php", content);
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Failed sending status update to carbon.");
+                Console.WriteLine(ex);
+            }
         }
 
         public TimeSpan GetUptime() =>
